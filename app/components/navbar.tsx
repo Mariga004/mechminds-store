@@ -17,7 +17,7 @@ const Navbar = async () => {
           <div className="flex items-center gap-x-4">
             <MobileNav categories={categories} />
             <Link href="/" className="ml-4 flex lg:ml-0 gap-x-2">
-              <p className="font-bold text-xl">ELIMU ROBOTICS</p>
+              <p className="font-bold text-xl">E.ROBOTICS</p>
             </Link>
             <div className="hidden lg:block">
               <MainNav data={categories} />
