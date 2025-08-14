@@ -1,6 +1,6 @@
 "use client"
 
-import { Dialog, DialogPanel, Transition } from "@headlessui/react";
+import { Dialog,Transition } from "@headlessui/react";
 import { Fragment } from "react";
 import IconButton from "./icon-button";
 import { X } from "lucide-react";

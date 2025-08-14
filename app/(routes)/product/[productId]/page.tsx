@@ -5,19 +5,23 @@ import Productlist from '@/app/components/product-list';
 import Container from '@/app/components/ui/container';
 import Info from "@/app/components/info";
 
-
 interface ProductPageProps {
-  params: {
+  params: Promise<{
     productId: string;
-  }
+  }>
 }
+
 const ProductPage: React.FC<ProductPageProps> = async ({
   params
 }) => {
-  const product = await getProduct(params.productId);
+  // Await the params Promise
+  const { productId } = await params;
+  
+  const product = await getProduct(productId);
   const suggestedProducts = await getProducts({
     categoryId: product?.category?.id 
   })
+  
   return (
     <div className='bg-white'>
       <Container>

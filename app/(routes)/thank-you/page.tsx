@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, Package, ArrowRight, Home, Car, Truck } from 'lucide-react';
+import { CheckCircle, Home, Truck } from 'lucide-react';
 import  Button  from '@/app/components/ui/button';
 import { useRouter } from 'next/navigation';
 

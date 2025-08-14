@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -8,8 +8,9 @@ import Button from '@/app/components/ui/button';
 import { Package, MapPin, Clock, User, Phone, Mail, CreditCard, ArrowLeft, Truck, CheckCircle, Eye, ShoppingBag, Calendar } from 'lucide-react';
 import { getUserOrders, getOrderById } from '@/actions/get-orders';
 import type { Order } from '@/actions/get-orders';
+import Image from 'next/image';
 
-// Helper functions (same as before)
+// Helper functions
 function formatDate(date: Date | string) {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   return new Intl.DateTimeFormat('en-US', {
@@ -54,22 +55,29 @@ function getStatusIcon(status: string) {
   }
 }
 
-const OrdersDashboard = ({ storeId }: { storeId: string }) => {
+interface OrdersPageProps {
+  params: Promise<{ storeId: string }>;
+}
+
+const OrdersDashboard = ({ params }: OrdersPageProps) => {
   const { user, isLoaded } = useUser();
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user's orders
+  // Resolve the params Promise
   useEffect(() => {
-    if (isLoaded && user?.emailAddresses?.[0]?.emailAddress) {
-      loadUserOrders();
-    }
-  }, [isLoaded, user, storeId]);
+    const resolveParams = async () => {
+      const resolvedParams = await params;
+      setStoreId(resolvedParams.storeId);
+    };
+    resolveParams();
+  }, [params]);
 
-  const loadUserOrders = async () => {
-    if (!user?.emailAddresses?.[0]?.emailAddress) return;
+  const loadUserOrders = useCallback(async () => {
+    if (!user?.emailAddresses?.[0]?.emailAddress || !storeId) return;
 
     setLoading(true);
     setError(null);
@@ -83,9 +91,17 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, storeId]);
+
+  useEffect(() => {
+    if (isLoaded && user?.emailAddresses?.[0]?.emailAddress && storeId) {
+      loadUserOrders();
+    }
+  }, [isLoaded, user, storeId, loadUserOrders]);
 
   const handleViewOrder = async (orderId: string) => {
+    if (!storeId) return;
+    
     setLoading(true);
     setError(null);
 
@@ -105,8 +121,7 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     setError(null);
   };
 
-  // Loading state
-  if (!isLoaded || loading) {
+  if (!isLoaded || loading || !storeId) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto">
@@ -121,7 +136,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     );
   }
 
-  // Not authenticated
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -136,7 +150,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     );
   }
 
-  // Show individual order details
   if (selectedOrder) {
     const totalPrice = selectedOrder.orderItems.reduce((total, item) => {
       return total + (item.quantity * Number(item.product.price.toString()));
@@ -145,7 +158,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          {/* Header */}
           <div className="flex items-center gap-4 mb-6">
             <Button  
               onClick={handleBackToOrders}
@@ -157,7 +169,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
             <h1 className="text-2xl font-bold">Order Details</h1>
           </div>
 
-          {/* Order Overview */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -230,7 +241,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
             </CardContent>
           </Card>
 
-          {/* Order Items */}
           <Card>
             <CardHeader>
               <CardTitle>Your Items</CardTitle>
@@ -239,9 +249,11 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
               <div className="space-y-4">
                 {selectedOrder.orderItems.map((item) => (
                   <div key={item.id} className="flex items-center gap-4 p-4 border rounded-lg bg-white">
-                    <img
+                    <Image
                       src={item.product.images[0]?.url || '/placeholder-image.jpg'}
                       alt={item.product.name}
+                      width={64}
+                      height={64}
                       className="w-16 h-16 object-cover rounded-lg"
                       onError={(e) => {
                         e.currentTarget.src = '/placeholder-image.jpg';
@@ -264,7 +276,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
             </CardContent>
           </Card>
 
-          {/* Tracking Progress */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -327,7 +338,6 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
     );
   }
 
-  // Show orders list
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto">
@@ -353,7 +363,7 @@ const OrdersDashboard = ({ storeId }: { storeId: string }) => {
               <div className="text-center">
                 <ShoppingBag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No orders yet</h3>
-                <p className="text-gray-600">When you place orders, they'll appear here.</p>
+                <p className="text-gray-600">When you place orders, they&apos;ll appear here.</p>
               </div>
             </CardContent>
           </Card>
