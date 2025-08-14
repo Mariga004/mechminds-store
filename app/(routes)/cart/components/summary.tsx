@@ -311,15 +311,15 @@ const Summary = () => {
       </div>
 
       {!user && (
-        <div className="hidden lg:block bg-white rounded-lg p-8 border text-center">
+        <div className="bg-white rounded-lg p-6 lg:p-8 border text-center">
           <div className="mb-6">
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <UserPlus className="w-8 h-8 text-blue-600" />
+            <div className="mx-auto w-12 h-12 lg:w-16 lg:h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <UserPlus className="w-6 h-6 lg:w-8 lg:h-8 text-blue-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg lg:text-xl font-semibold text-gray-900 mb-2">
               Create Account to Continue
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-sm lg:text-base text-gray-600 mb-6">
               To complete your order and track your purchases, please create an
               account or sign in.
             </p>
