@@ -64,43 +64,71 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading = true
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   // Resolve the params Promise
   useEffect(() => {
     const resolveParams = async () => {
-      const resolvedParams = await params;
-      setStoreId(resolvedParams.storeId);
+      try {
+        const resolvedParams = await params;
+        console.log('Resolved params:', resolvedParams); // Debug log
+        setStoreId(resolvedParams.storeId);
+      } catch (err) {
+        console.error('Error resolving params:', err);
+        setError('Failed to load store information');
+        setLoading(false);
+      }
     };
     resolveParams();
   }, [params]);
 
   const loadUserOrders = useCallback(async () => {
-    if (!user?.emailAddresses?.[0]?.emailAddress || !storeId) return;
+    if (!user?.emailAddresses?.[0]?.emailAddress || !storeId) {
+      console.log('Missing user email or storeId:', { 
+        email: user?.emailAddresses?.[0]?.emailAddress, 
+        storeId 
+      });
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
+      console.log('Loading orders for:', user.emailAddresses[0].emailAddress, storeId);
       const userOrders = await getUserOrders(storeId, user.emailAddresses[0].emailAddress);
-      setOrders(userOrders);
+      console.log('Loaded orders:', userOrders);
+      setOrders(userOrders || []); // Ensure we always set an array
+      setInitialized(true);
     } catch (err) {
-      setError('Failed to load your orders. Please try again.');
       console.error('Error loading orders:', err);
+      setError('Failed to load your orders. Please try again.');
+      setOrders([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
-  }, [user, storeId]);
+  }, [user?.emailAddresses?.[0]?.emailAddress, storeId]);
 
+  // Load orders when user and storeId are ready
   useEffect(() => {
-    if (isLoaded && user?.emailAddresses?.[0]?.emailAddress && storeId) {
-      loadUserOrders();
+    if (isLoaded && storeId) {
+      if (user?.emailAddresses?.[0]?.emailAddress) {
+        loadUserOrders();
+      } else {
+        // User is loaded but not signed in
+        setLoading(false);
+        setInitialized(true);
+      }
     }
   }, [isLoaded, user, storeId, loadUserOrders]);
 
   const handleViewOrder = async (orderId: string) => {
-    if (!storeId) return;
+    if (!storeId) {
+      console.error('No storeId available');
+      return;
+    }
     
     setLoading(true);
     setError(null);
@@ -109,8 +137,8 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
       const order = await getOrderById(storeId, orderId);
       setSelectedOrder(order);
     } catch (err) {
-      setError('Failed to load order details. Please try again.');
       console.error('Error loading order:', err);
+      setError('Failed to load order details. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -121,7 +149,8 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     setError(null);
   };
 
-  if (!isLoaded || loading || !storeId) {
+  // Show loading state
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto">
@@ -129,6 +158,14 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
             <div className="text-center">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
               <p className="text-gray-600">Loading your orders...</p>
+              {/* Debug info in development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-4 text-xs text-gray-400">
+                  <p>User loaded: {isLoaded ? 'Yes' : 'No'}</p>
+                  <p>Store ID: {storeId || 'Not loaded'}</p>
+                  <p>User email: {user?.emailAddresses?.[0]?.emailAddress || 'Not available'}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -136,6 +173,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Show sign-in prompt
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -150,6 +188,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Show selected order details
   if (selectedOrder) {
     const totalPrice = selectedOrder.orderItems.reduce((total, item) => {
       return total + (item.quantity * Number(item.product.price.toString()));
@@ -284,7 +323,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {selectedOrder.trackingUpdates.length > 0 ? (
+              {selectedOrder.trackingUpdates?.length > 0 ? (
                 <div className="space-y-6">
                   {selectedOrder.trackingUpdates.map((update, index) => (
                     <div key={update.id} className="flex gap-4">
@@ -338,6 +377,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Main orders list view
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto">
