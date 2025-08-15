@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import Button from '@/app/components/ui/button';
@@ -55,53 +56,74 @@ function getStatusIcon(status: string) {
   }
 }
 
-interface OrdersPageProps {
-  params: Promise<{ storeId: string }>;
-}
-
-const OrdersDashboard = ({ params }: OrdersPageProps) => {
+const OrdersDashboard = () => {
   const { user, isLoaded } = useUser();
-  const [storeId, setStoreId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Get storeId from URL params or use a default one
+  const storeId = searchParams.get('storeId') || '3b479db5-4359-49a2-8ff6-7753906fc5c6'; // Your store ID from env
+  
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
-  // Resolve the params Promise
-  useEffect(() => {
-    const resolveParams = async () => {
-      const resolvedParams = await params;
-      setStoreId(resolvedParams.storeId);
-    };
-    resolveParams();
-  }, [params]);
+  // Helper function to add debug info
+  const addDebug = (message: string) => {
+    console.log(message);
+    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
 
   const loadUserOrders = useCallback(async () => {
-    if (!user?.emailAddresses?.[0]?.emailAddress || !storeId) return;
+    addDebug('loadUserOrders called');
+    
+    if (!user?.emailAddresses?.[0]?.emailAddress) {
+      addDebug('No user email available');
+      setLoading(false);
+      setInitialized(true);
+      return;
+    }
 
+    addDebug(`Loading orders for email: ${user.emailAddresses[0].emailAddress}, storeId: ${storeId}`);
+    
     setLoading(true);
     setError(null);
 
     try {
       const userOrders = await getUserOrders(storeId, user.emailAddresses[0].emailAddress);
-      setOrders(userOrders);
+      addDebug(`Successfully loaded ${userOrders?.length || 0} orders`);
+      setOrders(userOrders || []);
+      setInitialized(true);
     } catch (err) {
+      addDebug(`Error loading orders: ${err}`);
       setError('Failed to load your orders. Please try again.');
-      console.error('Error loading orders:', err);
+      setOrders([]);
+      setInitialized(true);
     } finally {
       setLoading(false);
     }
-  }, [user, storeId]);
+  }, [user?.emailAddresses?.[0]?.emailAddress, storeId]);
 
+  // Load orders when user is ready
   useEffect(() => {
-    if (isLoaded && user?.emailAddresses?.[0]?.emailAddress && storeId) {
-      loadUserOrders();
+    addDebug(`Effect triggered - isLoaded: ${isLoaded}, user: ${!!user}, storeId: ${storeId}`);
+    
+    if (isLoaded) {
+      if (user?.emailAddresses?.[0]?.emailAddress) {
+        addDebug('User authenticated, loading orders...');
+        loadUserOrders();
+      } else {
+        addDebug('User not authenticated');
+        setLoading(false);
+        setInitialized(true);
+      }
     }
-  }, [isLoaded, user, storeId, loadUserOrders]);
+  }, [isLoaded, user, loadUserOrders]);
 
   const handleViewOrder = async (orderId: string) => {
-    if (!storeId) return;
-    
     setLoading(true);
     setError(null);
 
@@ -109,8 +131,8 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
       const order = await getOrderById(storeId, orderId);
       setSelectedOrder(order);
     } catch (err) {
+      addDebug(`Error loading order: ${err}`);
       setError('Failed to load order details. Please try again.');
-      console.error('Error loading order:', err);
     } finally {
       setLoading(false);
     }
@@ -121,7 +143,8 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     setError(null);
   };
 
-  if (!isLoaded || loading || !storeId) {
+  // Loading state with debug info
+  if (!initialized || (loading && !selectedOrder)) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto">
@@ -129,6 +152,25 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
             <div className="text-center">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
               <p className="text-gray-600">Loading your orders...</p>
+              
+              {/* Debug information */}
+              <div className="mt-4 text-xs text-gray-400 max-w-md">
+                <p>User loaded: {isLoaded ? 'Yes' : 'No'}</p>
+                <p>Store ID: {storeId}</p>
+                <p>User email: {user?.emailAddresses?.[0]?.emailAddress || 'Not available'}</p>
+                <p>API URL: {process.env.NEXT_PUBLIC_API_URL || 'Not configured'}</p>
+                <p>Initialized: {initialized ? 'Yes' : 'No'}</p>
+                <p>Loading: {loading ? 'Yes' : 'No'}</p>
+                
+                {debugInfo.length > 0 && (
+                  <div className="mt-2 p-2 bg-gray-100 rounded text-left max-h-40 overflow-y-auto">
+                    <p className="font-semibold">Debug Log:</p>
+                    {debugInfo.slice(-10).map((info, index) => (
+                      <p key={index} className="text-xs">{info}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -136,6 +178,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Show sign-in prompt
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -150,6 +193,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Show selected order details
   if (selectedOrder) {
     const totalPrice = selectedOrder.orderItems.reduce((total, item) => {
       return total + (item.quantity * Number(item.product.price.toString()));
@@ -284,7 +328,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {selectedOrder.trackingUpdates.length > 0 ? (
+              {selectedOrder.trackingUpdates?.length > 0 ? (
                 <div className="space-y-6">
                   {selectedOrder.trackingUpdates.map((update, index) => (
                     <div key={update.id} className="flex gap-4">
@@ -338,6 +382,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
+  // Main orders list view
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto">
@@ -345,6 +390,22 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
           <p className="text-gray-600">Track and manage all your orders</p>
         </div>
+
+        {/* Debug panel in development */}
+        {process.env.NODE_ENV === 'development' && debugInfo.length > 0 && (
+          <Card className="mb-6 border-blue-200 bg-blue-50">
+            <CardContent className="pt-6">
+              <details className="text-sm">
+                <summary className="font-semibold cursor-pointer">Debug Information</summary>
+                <div className="mt-2 max-h-40 overflow-y-auto">
+                  {debugInfo.map((info, index) => (
+                    <p key={index} className="text-xs text-blue-700">{info}</p>
+                  ))}
+                </div>
+              </details>
+            </CardContent>
+          </Card>
+        )}
 
         {error && (
           <Card className="mb-6 border-red-200 bg-red-50">
