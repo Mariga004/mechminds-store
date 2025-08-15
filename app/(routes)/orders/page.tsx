@@ -64,90 +64,43 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
-
-  // Helper function to add debug info
-  const addDebug = (message: string) => {
-    console.log(message);
-    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
-  };
 
   // Resolve the params Promise
   useEffect(() => {
     const resolveParams = async () => {
-      try {
-        addDebug('Starting params resolution...');
-        const resolvedParams = await params;
-        addDebug(`Resolved params: ${JSON.stringify(resolvedParams)}`);
-        setStoreId(resolvedParams.storeId);
-      } catch (err) {
-        addDebug(`Error resolving params: ${err}`);
-        setError('Failed to load store information');
-        setLoading(false);
-      }
+      const resolvedParams = await params;
+      setStoreId(resolvedParams.storeId);
     };
     resolveParams();
   }, [params]);
 
   const loadUserOrders = useCallback(async () => {
-    addDebug('loadUserOrders called');
-    
-    if (!user?.emailAddresses?.[0]?.emailAddress) {
-      addDebug('No user email available');
-      return;
-    }
-    
-    if (!storeId) {
-      addDebug('No storeId available');
-      return;
-    }
+    if (!user?.emailAddresses?.[0]?.emailAddress || !storeId) return;
 
-    addDebug(`Attempting to load orders for email: ${user.emailAddresses[0].emailAddress}, storeId: ${storeId}`);
-    
     setLoading(true);
     setError(null);
 
     try {
       const userOrders = await getUserOrders(storeId, user.emailAddresses[0].emailAddress);
-      addDebug(`Successfully loaded ${userOrders?.length || 0} orders`);
-      setOrders(userOrders || []);
-      setInitialized(true);
+      setOrders(userOrders);
     } catch (err) {
-      addDebug(`Error loading orders: ${err}`);
       setError('Failed to load your orders. Please try again.');
-      setOrders([]);
-      setInitialized(true); // Set initialized even on error
+      console.error('Error loading orders:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.emailAddresses?.[0]?.emailAddress, storeId]);
+  }, [user, storeId]);
 
-  // Main effect to trigger loading
   useEffect(() => {
-    addDebug(`Main effect triggered - isLoaded: ${isLoaded}, storeId: ${storeId}, user: ${!!user}`);
-    
-    if (isLoaded && storeId) {
-      if (user?.emailAddresses?.[0]?.emailAddress) {
-        addDebug('All conditions met, calling loadUserOrders');
-        loadUserOrders();
-      } else {
-        addDebug('User loaded but no email, setting initialized');
-        setLoading(false);
-        setInitialized(true);
-      }
-    } else {
-      addDebug(`Waiting for conditions - isLoaded: ${isLoaded}, storeId: ${storeId}`);
+    if (isLoaded && user?.emailAddresses?.[0]?.emailAddress && storeId) {
+      loadUserOrders();
     }
   }, [isLoaded, user, storeId, loadUserOrders]);
 
   const handleViewOrder = async (orderId: string) => {
-    if (!storeId) {
-      addDebug('No storeId available for viewing order');
-      return;
-    }
+    if (!storeId) return;
     
     setLoading(true);
     setError(null);
@@ -156,8 +109,8 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
       const order = await getOrderById(storeId, orderId);
       setSelectedOrder(order);
     } catch (err) {
-      addDebug(`Error loading order: ${err}`);
       setError('Failed to load order details. Please try again.');
+      console.error('Error loading order:', err);
     } finally {
       setLoading(false);
     }
@@ -168,8 +121,7 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     setError(null);
   };
 
-  // Enhanced loading state with debug info
-  if (!initialized || (loading && !selectedOrder)) {
+  if (!isLoaded || loading || !storeId) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto">
@@ -177,25 +129,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
             <div className="text-center">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
               <p className="text-gray-600">Loading your orders...</p>
-              
-              {/* Always show debug info when loading */}
-              <div className="mt-4 text-xs text-gray-400 max-w-md">
-                <p>User loaded: {isLoaded ? 'Yes' : 'No'}</p>
-                <p>Store ID: {storeId || 'Not loaded'}</p>
-                <p>User email: {user?.emailAddresses?.[0]?.emailAddress || 'Not available'}</p>
-                <p>API URL: {process.env.NEXT_PUBLIC_API_URL || 'Not configured'}</p>
-                <p>Initialized: {initialized ? 'Yes' : 'No'}</p>
-                <p>Loading: {loading ? 'Yes' : 'No'}</p>
-                
-                {debugInfo.length > 0 && (
-                  <div className="mt-2 p-2 bg-gray-100 rounded text-left max-h-40 overflow-y-auto">
-                    <p className="font-semibold">Debug Log:</p>
-                    {debugInfo.slice(-10).map((info, index) => (
-                      <p key={index} className="text-xs">{info}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -203,7 +136,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
-  // Show sign-in prompt
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -218,7 +150,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
-  // Show selected order details (same as before)
   if (selectedOrder) {
     const totalPrice = selectedOrder.orderItems.reduce((total, item) => {
       return total + (item.quantity * Number(item.product.price.toString()));
@@ -238,7 +169,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
             <h1 className="text-2xl font-bold">Order Details</h1>
           </div>
 
-          {/* Rest of order details UI - keeping original */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -247,10 +177,160 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* ... rest of order details ... */}
-              <div className="text-center py-4">
-                <p>Order details would be shown here...</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium">Customer:</span>
+                    <span className="text-sm">{selectedOrder.customerName}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium">Delivery Address:</span>
+                  </div>
+                  <p className="text-sm ml-6">{selectedOrder.address}, {selectedOrder.county}</p>
+                  
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium">Phone:</span>
+                    <span className="text-sm">{selectedOrder.phone}</span>
+                  </div>
+
+                  {selectedOrder.customerEmail && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium">Email:</span>
+                      <span className="text-sm">{selectedOrder.customerEmail}</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium">Total Amount:</span>
+                    <span className="text-sm font-semibold">KSh {totalPrice.toLocaleString()}</span>
+                  </div>
+                  
+                  {selectedOrder.trackingId && (
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium">Tracking ID:</span>
+                      <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">{selectedOrder.trackingId}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium">Order Date:</span>
+                    <span className="text-sm">{formatDate(selectedOrder.createdAt)}</span>
+                  </div>
+                </div>
               </div>
+              
+              <div className="flex items-center gap-2 pt-2">
+                <Badge className={getStatusColor(selectedOrder.deliveryStatus)}>
+                  {getStatusIcon(selectedOrder.deliveryStatus)}
+                  <span className="ml-1">{selectedOrder.deliveryStatus}</span>
+                </Badge>
+                <Badge variant={selectedOrder.isPaid ? "default" : "destructive"}>
+                  {selectedOrder.isPaid ? "Paid" : "Pending"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Items</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {selectedOrder.orderItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-4 p-4 border rounded-lg bg-white">
+                    <Image
+                      src={item.product.images[0]?.url || '/placeholder-image.jpg'}
+                      alt={item.product.name}
+                      width={64}
+                      height={64}
+                      className="w-16 h-16 object-cover rounded-lg"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder-image.jpg';
+                      }}
+                    />
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900">{item.product.name}</h4>
+                      <p className="text-sm text-gray-500">
+                        Quantity: {item.quantity} × KSh {Number(item.product.price.toString()).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900">
+                        KSh {(item.quantity * Number(item.product.price.toString())).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Delivery Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedOrder.trackingUpdates.length > 0 ? (
+                <div className="space-y-6">
+                  {selectedOrder.trackingUpdates.map((update, index) => (
+                    <div key={update.id} className="flex gap-4">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                          update.status.toLowerCase() === 'delivered' 
+                            ? 'bg-green-500' 
+                            : index === 0 
+                              ? 'bg-blue-500' 
+                              : 'bg-gray-300'
+                        }`}>
+                          {update.status.toLowerCase() === 'delivered' && (
+                            <CheckCircle className="h-3 w-3 text-white" />
+                          )}
+                        </div>
+                        {index < selectedOrder.trackingUpdates.length - 1 && (
+                          <div className="w-px h-16 bg-gray-200 mt-2"></div>
+                        )}
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <div className="flex flex-col gap-1 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{update.status}</span>
+                            {update.location && (
+                              <span className="text-sm text-gray-500">• {update.location}</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            {formatDate(update.timestamp)}
+                          </p>
+                        </div>
+                        {update.note && (
+                          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                            {update.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No tracking updates available yet.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -258,7 +338,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
     );
   }
 
-  // Main orders list view
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto">
@@ -266,22 +345,6 @@ const OrdersDashboard = ({ params }: OrdersPageProps) => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
           <p className="text-gray-600">Track and manage all your orders</p>
         </div>
-
-        {/* Debug panel in development */}
-        {process.env.NODE_ENV === 'development' && debugInfo.length > 0 && (
-          <Card className="mb-6 border-blue-200 bg-blue-50">
-            <CardContent className="pt-6">
-              <details className="text-sm">
-                <summary className="font-semibold cursor-pointer">Debug Information</summary>
-                <div className="mt-2 max-h-40 overflow-y-auto">
-                  {debugInfo.map((info, index) => (
-                    <p key={index} className="text-xs text-blue-700">{info}</p>
-                  ))}
-                </div>
-              </details>
-            </CardContent>
-          </Card>
-        )}
 
         {error && (
           <Card className="mb-6 border-red-200 bg-red-50">
